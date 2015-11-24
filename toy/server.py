@@ -2,7 +2,6 @@ from wsgiref.simple_server import make_server
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath('.')))
-print sys.path
 from toy.web import Toy
 
 
@@ -22,7 +21,7 @@ class WSGIServer(object):
         while True:
             self.client, address = self.sock.accept()
             request_data = self.client.recv(1024)
-            print request_data
+            print(request_data)
             env = self.get_environ(request_data)
             result = self.application(env, self.start_response)
 
