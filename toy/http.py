@@ -1,7 +1,14 @@
 # coding=utf-8
 
+import threading
+import httplib
 
-class Request(object):
+
+class BaseObject(threading.local):
+    pass
+
+
+class Request(BaseObject):
     
     def __init__(self, environ={}):
         self.environ = environ
@@ -31,4 +38,22 @@ class Request(object):
 
 
 class Response(object):
-    pass
+    
+    def __init__(self, body=None, code=200, content_type='text/html'):
+        self.code = code
+        self.content_type = content_type
+        self._body = body 
+
+    @property
+    def status(self):
+        return ' '.join([str(self.code), httplib.responses.get(self.code)])
+
+    def set_status(self, code):
+        self.code = int(code)
+
+    @property
+    def body(self):
+        return self._body
+
+    def set_body(self, body):
+        self._body = str(body)
