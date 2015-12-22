@@ -8,9 +8,12 @@ class BaseObject(threading.local):
     pass
 
 
-class Request(BaseObject):
+class RequestBase(BaseObject):
     
     def __init__(self, environ={}):
+        self.environ = environ
+
+    def bind(self, environ):
         self.environ = environ
 
     @property
@@ -37,7 +40,7 @@ class Request(BaseObject):
         return self.environ
 
 
-class Response(object):
+class ResponseBase(object):
     
     def __init__(self, body=None, code=200, content_type='text/html'):
         self.code = code
