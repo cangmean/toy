@@ -23,7 +23,7 @@ class Reloader(object):
 
     def check(self, mod):
 
-        if not(mod and hasattr(mod, '__file__') and mode.__file__):
+        if not(mod and hasattr(mod, '__file__') and mod.__file__):
             return
 
         try:

@@ -22,7 +22,15 @@ class LocalStack(object):
 
     @property
     def top(self):
-        if self.empty():
+        try:
             return self._stack[-1]
-        else:
+        except (AttributeError, IndexError):
             return None
+
+    def __len__(self):
+        return len(self._stack)
+
+
+if __name__ == '__main__':
+    _stack = LocalStack()
+    print _statck.top

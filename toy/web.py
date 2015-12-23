@@ -66,19 +66,21 @@ class Toy(object):
     def add_url_rule(self, rule, endpoint, **options):
         '''添加rule ''' 
         options[endpoint] = endpoint
+        print endpoint
         options.setdefault('methods', ('GET',))
         self.url_map.add(Rule(rule, **options))
 
-    def route(self, rule, **option):
+    def route(self, rule, **options):
         ''' 路由装饰，用于添加url rule'''
         def wrapper(func):
+            print '\n' * 3, rule, options, func.__name__
             self.add_url_rule(rule, func.__name__, **options)
             self.view_functions[func.__name__] = func
             return func
         return wrapper
 
     def request_context(self, environ):
-        pass
+        return _RequestContext(self, environ)
 
     def match_request(self):
         ''' 匹配请求 ''' 
@@ -108,6 +110,9 @@ class Toy(object):
             if rv is not None:
                 return rv
 
+    def process_response(self, response):
+        return response
+
     def dev_wsgi_app(self, environ, start_response):
         with self.request_context(environ):
             rv = self.preprocess_request()
@@ -126,7 +131,11 @@ class Toy(object):
 
     def __call__(self, environ, start_response):
         ''' callable '''
-        return self.wsgi_app(environ, start_response)
+        print '123'
+        return self.dev_wsgi_app(environ, start_response)
 
 _request_ctx_stack = LocalStack()
+'''
+current_app = _request_ctx_stack.top.app
 request = _request_ctx_stack.top.request
+'''
