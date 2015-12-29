@@ -65,15 +65,13 @@ class Toy(object):
 
     def add_url_rule(self, rule, endpoint, **options):
         '''添加rule ''' 
-        options[endpoint] = endpoint
-        print endpoint
+        options['endpoint'] = endpoint
         options.setdefault('methods', ('GET',))
         self.url_map.add(Rule(rule, **options))
 
     def route(self, rule, **options):
         ''' 路由装饰，用于添加url rule'''
         def wrapper(func):
-            print '\n' * 3, rule, options, func.__name__
             self.add_url_rule(rule, func.__name__, **options)
             self.view_functions[func.__name__] = func
             return func
@@ -91,13 +89,14 @@ class Toy(object):
     def dispatch_request(self):
         try:
             endpoint, values = self.match_request()
+            print endpoint, values
             return self.view_functions[endpoint](**values)
         except:
             pass
 
     def make_response(self, rv):
         ''' 根据类型返回结果 '''
-        if isinstance(rv, self.reponse_class):
+        if isinstance(rv, self.response_class):
             return rv
         if isinstance(rv, str):
             return self.response_class(rv)
@@ -118,8 +117,10 @@ class Toy(object):
             rv = self.preprocess_request()
             if rv is None:
                 rv = self.dispatch_request()
+            print '12333', rv
             response = self.make_response(rv)
             response = self.process_response(response)
+            print '\n' * 3, response
             return response(environ, start_response)
 
     def wsgi_app(self, environ, start_response):
@@ -131,7 +132,6 @@ class Toy(object):
 
     def __call__(self, environ, start_response):
         ''' callable '''
-        print '123'
         return self.dev_wsgi_app(environ, start_response)
 
 _request_ctx_stack = LocalStack()
