@@ -94,11 +94,11 @@ class Rule(object):
         if m is not None:
             groups = m.groupdict()
 
-        result = {}
-        for name, value in groups.iteritems():
-            result[str(name)] = value
+            result = {}
+            for name, value in groups.iteritems():
+                result[str(name)] = value
 
-        return result
+            return result
 
 
 class Map(object):

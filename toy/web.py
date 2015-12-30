@@ -20,7 +20,7 @@ class Request(RequestBase):
 
 
 class Response(ResponseBase):
-    pass
+    default_mimetype = 'text/html'
 
 
 class _RequestContext(object):
@@ -83,16 +83,13 @@ class Toy(object):
     def match_request(self):
         ''' 匹配请求 ''' 
         rv = self.url_map.match()
-        request.endpoint, request.view_args = rv
+        #request.endpoint, request.view_args = rv
         return rv
 
     def dispatch_request(self):
-        try:
-            endpoint, values = self.match_request()
-            print endpoint, values
-            return self.view_functions[endpoint](**values)
-        except:
-            pass
+        ''' 分派请求 '''
+        endpoint, values = self.match_request()
+        return self.view_functions[endpoint](**values)
 
     def make_response(self, rv):
         ''' 根据类型返回结果 '''
@@ -117,10 +114,8 @@ class Toy(object):
             rv = self.preprocess_request()
             if rv is None:
                 rv = self.dispatch_request()
-            print '12333', rv
             response = self.make_response(rv)
             response = self.process_response(response)
-            print '\n' * 3, response
             return response(environ, start_response)
 
     def wsgi_app(self, environ, start_response):

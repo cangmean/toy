@@ -60,3 +60,9 @@ class ResponseBase(object):
 
     def set_body(self, body):
         self._body = str(body)
+
+    def __call__(self, environ, start_response):
+        ''' 处理这个响应为wsgi application'''
+        headers = [('Content-Type', self.content_type)]
+        start_response('200 OK', headers)
+        return self.body

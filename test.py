@@ -4,6 +4,7 @@ from toy.web import Toy
 
 app = Toy()
 
+@app.route('/')
 @app.route('/index')
 def index():
     return 'hello , toy'
