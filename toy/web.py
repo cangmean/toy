@@ -94,10 +94,13 @@ class Toy(object):
     def make_response(self, rv):
         ''' 根据类型返回结果 '''
         if isinstance(rv, self.response_class):
+            print 'response objects'
             return rv
         if isinstance(rv, str):
+            print 'string objects'
             return self.response_class(rv)
         if isinstance(rv, tuple):
+            print 'tuple objects'
             return self.response_class(*rv)
 
     def preprocess_request(self):
