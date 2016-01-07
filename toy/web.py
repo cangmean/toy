@@ -5,21 +5,21 @@ import sys
 #from jinja2 import Environment, PackageLoader, FileSystemLoader
 from .router import Map, Rule
 from .local import LocalStack
-from .http import RequestBase, ResponseBase
+from .http import BaseRequest, BaseResponse
 from ._reloader import Reloader
 
 
 def render(template_name, **context):
     pass
 
-class Request(RequestBase):
+class Request(BaseRequest):
     def __init__(self, environ):
         RequestBase.__init__(self, environ)
         self.endpoint = None
         self.view_args = None
 
 
-class Response(ResponseBase):
+class Response(BaseResponse):
     default_mimetype = 'text/html'
 
 
@@ -112,7 +112,7 @@ class Toy(object):
     def process_response(self, response):
         return response
 
-    def dev_wsgi_app(self, environ, start_response):
+    def wsgi_app(self, environ, start_response):
         with self.request_context(environ):
             rv = self.preprocess_request()
             if rv is None:
@@ -121,16 +121,9 @@ class Toy(object):
             response = self.process_response(response)
             return response(environ, start_response)
 
-    def wsgi_app(self, environ, start_response):
-        request = Request(environ)
-        self._response = Response()
-        response_headers = [('Content-type', 'text/plain')]
-        start_response(self._response.status, response_headers)
-        yield 'Hello wrold\n'
-
     def __call__(self, environ, start_response):
         ''' callable '''
-        return self.dev_wsgi_app(environ, start_response)
+        return self.wsgi_app(environ, start_response)
 
 _request_ctx_stack = LocalStack()
 '''

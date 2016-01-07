@@ -12,7 +12,6 @@ def get_content_type(mimetype, charset):
         mimetype += '; charset=' + charset
     return mimetype
 
-
 def native_itermethods(names):
     ''' 为每一个类创建一个itermethod的实例方法
     比如: get 或创建处 iterget方法,并把原有的get方法返回iterget的列表.
@@ -64,7 +63,7 @@ class Headers(object):
 
     def get(self, key, default=None, _type=None):
         try:
-            rv = self.__getitem__(key, _get_mode=True):
+            rv = self.__getitem__(key, _get_mode=True)
         except KeyError:
             return default
 
@@ -82,6 +81,9 @@ class Headers(object):
     def __setitem__(self, key, value):
         self.add(key, value)
 
+    def to_wsgi_list(self):
+        return list(self)
+
     def __iter__(self):
         return iter(self._list)
 
@@ -91,14 +93,25 @@ class Headers(object):
     def clear(self):
         del self._list[:]
 
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, list(self))
 
-class RequestBase(Object):
+
+class BaseRequest(object):
+
+    charset = 'utf-8'
+    max_content_length = None
+    max_form_memory_size = None
     
-    def __init__(self, environ={}):
+    def __init__(self, environ):
         self.environ = environ
 
     def bind(self, environ):
         self.environ = environ
+
+    @property
+    def url_charset(self):
+        return self.charset
 
     @property
     def path(self):
@@ -124,7 +137,7 @@ class RequestBase(Object):
         return self.environ
 
 
-class ResponseBase(object):
+class BaseResponse(object):
 
     charset = 'utf-8'
 
@@ -136,7 +149,7 @@ class ResponseBase(object):
                  headers=None, content_type=None, mimetype=None):
         if isinstance(headers, Headers):
             self.headers = header
-        elif not header:
+        elif not headers:
             self.headers = Headers()
         else:
             self.headers = Headers(header)
@@ -175,20 +188,71 @@ class ResponseBase(object):
 
     status_code = property(_get_status_code, _set_status_code,
                            doc='The HTTP Status code as number')
+    # 释放内存中的变量
+    del _get_status_code, _set_status_code
+
+    def _get_status(self):
+        return self._status
+
+    def _set_status(self, value):
+        self._status = value
+        try:
+            self._status_code = int(self._status.split(None, 1)[0])
+        except ValueError:
+            self._status_code = 0
+            self._status = '0 %s' % self._status
+
+    status = property(_get_status, _set_status, doc='The HTTP Status code')
+    del _get_status, _set_status
 
     def get_data(self):
-        pass
+        return self.response
 
     def set_data(self, value):
         if isinstance(value, str):
             value = value.encode(self.charset)
         self.response = [value]
+        self.headers['Content-Length'] = str(len(value))
 
     data = property(get_data, set_data, doc='''设置和获取响应数据 ''')
 
+    def close(self):
+        if hasattr(self.response, 'close'):
+            self.response.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.close()
+
+    def get_wsgi_headers(self, environ):
+        headers = Headers(self.headers)
+        content_length = None
+        status = self.status_code
+
+        for key, value in headers:
+            ikey = key.lower()
+            if ikey == 'content-length':
+                content_length = value
+
+        if 100 <= status < 200 or status == 204:
+            headers['Content-Length'] = content_length = u'0'
+
+        return headers
+
+    def get_app_iter(self, environ):
+        status = self.status_code
+
+        return self.response
+
+    def get_wsgi_response(self, environ):
+        headers = self.get_wsgi_headers(environ)
+        app_iter = self.get_app_iter(environ)
+        return app_iter, self.status, headers.to_wsgi_list()
 
     def __call__(self, environ, start_response):
         ''' 处理这个响应为wsgi application'''
-        headers = [('Content-Type', self.content_type)]
-        start_response('200 OK', headers)
-        return self.body
+        app_iter, status, headers = self.get_wsgi_response(environ)
+        start_response(status, headers)
+        return app_iter
