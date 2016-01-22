@@ -14,7 +14,7 @@ def render(template_name, **context):
 
 class Request(BaseRequest):
     def __init__(self, environ):
-        RequestBase.__init__(self, environ)
+        BaseRequest.__init__(self, environ)
         self.endpoint = None
         self.view_args = None
 
@@ -45,6 +45,8 @@ class Toy(object):
 
     request_class = Request
     response_class = Response
+
+    session_cookie_name = 'session'
 
     def __init__(self):
         self.debug = False
