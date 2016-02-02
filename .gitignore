@@ -5,6 +5,8 @@ test.py
 
 # C extensions
 *.so
+*.swp
+*.swap
 
 # Distribution / packaging
 .Python
