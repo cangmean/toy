@@ -1,8 +1,15 @@
 # coding=utf-8
 
+'''
+一个玩具框架，用于理解python 框架机制。
+查看了flask源码和werkzeug源码, 并简化和解耦和。
+'''
+
 import re
 import os
 import sys
+
+__all__ = ['Toy']
 
 rule_re = re.compile(r'''
     (?P<static>[^<]*)
@@ -282,6 +289,17 @@ class BaseResponse(object):
         return app_iter
 
 
+class Request(BaseRequest):
+
+    def __init__(self, environ):
+        BaseRequest.__init__(self, environ)
+
+
+class Response(BaseResponse):
+    
+    default_mimetype = 'text/html'
+
+
 class _Rule(object):
 
     def __init__(self, rule, handler=None, methods=None):
@@ -296,7 +314,6 @@ class _Rule(object):
             if 'HEAD' not in self.methods and 'GET' in self.methods:
                 self.methods.add('HEAD')
 
-        self._trace = []
         self._regex = []
         self.build_regex()
 
@@ -310,14 +327,11 @@ class _Rule(object):
         for _static, _type, _variable in parse_rule(self.rule):
             if _static:
                 regex_parts.append(re.escape(_static))
-                self._trace.append((False, _static))
             elif _variable:
                 if _type is None or _type == 'string':
                     regex_parts.append('(?P<%s>%s)' % (_variable, '[a-zA-Z0-9_]*'))
-                    self._trace.append((True, _variable))
                 elif _type == 'int':
                     regex_parts.append('(?P<%s>%s)' % (_variable, '[0-9]*'))
-                    self._trace.append((True, _variable))
                 else:
                     raise TypeError('Rule variable argument must be int or string. The argument default is string.')
         regex = r'^%s$' % (u''.join(regex_parts))
@@ -364,13 +378,15 @@ class _Map(object):
 
             if rv is None:
                 continue
-
             if rule.methods is not None and method not in rule.methods:
                 continue
             return rule.handler, rv
 
 
 class Toy(object):
+
+    static_path = '/static'
+    secret_key = None
 
     def __init__(self):
         self.debug = False
@@ -396,8 +412,8 @@ class Toy(object):
 
     def dispatch_request(self):
         try:
-            handler, values = self.match_request()
-            return self.view_funcs[handler](**values)
+            handler, params = self.match_request()
+            return self.view_funcs[handler](**params)
         except Exception, e:
             print str(e)
 
