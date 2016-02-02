@@ -70,11 +70,13 @@ class Headers(object):
                 self.extend(defaults)
 
     def __getitem__(self, key, _get_mode=False):
+
         if not _get_mode:
             if isinstance(key, int):
                 return self._list[key]
-            else isinstance(key, slice):
+            elif isinstance(key, slice):
                 return self.__class__(self._list[key])
+
         if not isinstance(key, str):
             raise TypeError('key type must be string.')
         ikey = key.lower()
@@ -368,7 +370,7 @@ class _Map(object):
             return rule.handler, rv
 
 
-class Pocket(object):
+class Toy(object):
 
     def __init__(self):
         self.debug = False
@@ -443,7 +445,7 @@ class Reloader(object):
         # set mtime to mtimes if mtimes not this module. reload module if module not in mtimes.
         if mod not in self.mtimes:
             self.mtimes[mod] = mtime
-        else self.mtimes[mod] < mtime:
+        elif self.mtimes[mod] < mtime:
             try:
                 reload(mod)
                 self.mtimes[mod] = mtime
