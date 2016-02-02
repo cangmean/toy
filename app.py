@@ -15,6 +15,16 @@ rule_re = re.compile(r'''
 ''', re.VERBOSE)
 
 
+def get_content_type(mimetype, charset):
+    
+    if mimetype.startswith('text/') or \
+       mimetype == 'application/xml' or \
+       (mimetype.startswith('application/') and
+               mimetype.endswith('+xml')):
+        mimetype += '; charset=' + charset
+    return mimetype
+
+
 def parse_rule(rule):
     '''循环解析rule 并返回。
     比如 rule = '/index/<int:page>'
