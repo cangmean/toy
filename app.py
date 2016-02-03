@@ -8,6 +8,7 @@
 import re
 import os
 import sys
+import httplib
 
 __all__ = ['Toy']
 
@@ -192,9 +193,9 @@ class BaseResponse(object):
             if mimetype is not None:
                 mimetype = get_content_type(mimetype, self.charset)
             content_type = mimetype
-
         if content_type is not None:
             self.headers['Content-Type'] = content_type
+
         if status is None:
             status = self.default_status
         if isinstance(status, int):
@@ -215,7 +216,7 @@ class BaseResponse(object):
     def _set_status_code(self, code):
         self._status_code = code
         try:
-            self._status = '%d %s' % (code, httplib.response.get(code))
+            self._status = '%d %s' % (code, httplib.responses.get(code))
         except KeyError:
             self._status = '%d UNKOWN' % code
 
@@ -240,14 +241,13 @@ class BaseResponse(object):
     def get_data(self):
         return self.response
 
-    def set_data(self):
+    def set_data(self, value):
         if isinstance(value, str):
             value = value.encode(self.charset)
         self.response = [value]
         self.headers['Content-Length'] = str(len(value))
 
     data = property(get_data, set_data, doc='''get and set response data''')
-    del get_data, set_data
 
     def close(self):
         if hasattr(self.response, 'close'):
@@ -383,10 +383,28 @@ class _Map(object):
             return rule.handler, rv
 
 
+class _RequestContext(object):
+
+    def __init__(self, app, environ):
+        self.app = app
+        self.url_adapter = app.url_map.bind_to_environ(environ)
+        self.request = app.request_class(environ)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, tb):
+        if tb is None or not self.app.debug:
+            pass
+
+
 class Toy(object):
 
     static_path = '/static'
     secret_key = None
+
+    request_class = Request
+    response_class = Response
 
     def __init__(self):
         self.debug = False
@@ -422,12 +440,22 @@ class Toy(object):
         server = make_server(host, int(port), self)
         server.serve_forever()
 
+    def make_response(self, rv):
+        if isinstance(rv, self.response_class):
+            return rv
+        elif isinstance(rv, str):
+            return self.response_class(rv)
+        elif isinstance(rv, tuple):
+            return self.response_class(*rv)
+
+    def request_context(self, environ):
+        return _RequestContext(self, environ)
+
     def wsgi_app(self, environ, start_response):
-        self.url_map.bind_to_environ(environ)
-        response = self.dispatch_request()
-        headers = [('Content-Type', 'text/plain')]
-        start_response('200 OK', headers)
-        return [response]
+        with self.request_context(environ):
+            rv = self.dispatch_request()
+            response = self.make_response(rv)
+            return response(environ, start_response)
 
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
