@@ -2,13 +2,21 @@
 
 '''
 一个玩具框架，用于理解python 框架机制。
-查看了flask源码和werkzeug源码, 并简化和解耦和。
+查看了flask源码和werkzeug源码, 并简化，解耦和。
 '''
-
+from werkzeug.exceptions import HTTPException, InternalServerError
 import re
 import os
 import sys
 import httplib
+import logging
+
+logger = logging.getLogger('toy')
+handler = logging.StreamHandler()
+fomatter = logging.Formatter('[line: %(lineno)d] %(levelname)s: %(message)s')
+handler.setFormatter(fomatter)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(handler)
 
 __all__ = ['Toy']
 
@@ -23,8 +31,16 @@ rule_re = re.compile(r'''
 ''', re.VERBOSE)
 
 
+def _get_package_path(name):
+    """Returns the path to a package or cwd if that cannot be found."""
+    try:
+        return os.path.abspath(os.path.dirname(sys.modules[name].__file__))
+    except (KeyError, AttributeError):
+        return os.getcwd()
+
+
 def get_content_type(mimetype, charset):
-    
+
     if mimetype.startswith('text/') or \
        mimetype == 'application/xml' or \
        (mimetype.startswith('application/') and
@@ -210,6 +226,14 @@ class BaseResponse(object):
         else:
             self.response = response
 
+    @classmethod
+    def force_type(cls, response, environ=None):
+        # 强制转换成response 类型, 这里有错误
+        if not isinstance(response, BaseResponse):
+            response = BaseRequest(response)
+        response.__class__ = cls
+        return response
+
     def _get_status_code(self):
         return self._status_code
 
@@ -296,7 +320,7 @@ class Request(BaseRequest):
 
 
 class Response(BaseResponse):
-    
+
     default_mimetype = 'text/html'
 
 
@@ -343,7 +367,7 @@ class _Rule(object):
     def match(self, path):
         m = self._regex.search(path)
         if m is not None:
-            groups = m .groupdict()
+            groups = m.groupdict()
             result = {}
             for name, value in groups.iteritems():
                 result[str(name)] = value
@@ -361,7 +385,7 @@ class _Map(object):
         self.method = environ.get('REQUEST_METHOD', 'GET')
         self.path_info = environ.get('PATH_INFO')
         self.query_stirng = environ.get('QUERY_STRING')
-        
+
     def add(self, rulefactory):
         '''添加rule '''
         for rule in rulefactory.get_rules(self):
@@ -406,11 +430,12 @@ class Toy(object):
     request_class = Request
     response_class = Response
 
-    def __init__(self):
+    def __init__(self, name=None):
+        self.name = _get_package_path(name)
         self.debug = False
-
         self.view_funcs = {}
         self.url_map = _Map()
+        self.error_handlers = {}
 
     def add_route(self, rule, handler, **options):
         options['handler'] = handler
@@ -418,11 +443,17 @@ class Toy(object):
         self.url_map.add(_Rule(rule, **options))
 
     def route(self, rule, **options):
-        def wrapper(func):
+        def decorator(func):
             self.add_route(rule, func.__name__, **options)
             self.view_funcs[func.__name__] = func
             return func
-        return wrapper
+        return decorator
+
+    def errorhandler(self, code):
+        def decorator(func):
+            self.error_handlers[code] = func
+            return func
+        return decorator
 
     def match_request(self):
         rv = self.url_map.match()
@@ -432,8 +463,17 @@ class Toy(object):
         try:
             handler, params = self.match_request()
             return self.view_funcs[handler](**params)
-        except Exception, e:
-            print str(e)
+        except HTTPException as e:
+            handler = self.error_handlers.get(e.code)
+            if handler is None:
+                return e
+            return handler(e)
+        except Exception as e:
+            handler = self.error_handlers.get(500)
+            # debug 状态为True 或者 没有自定义错误信息
+            if self.debug or handler is None:
+                raise
+            return handler(e)
 
     def run(self, host='127.0.0.1', port=5000):
         from wsgiref.simple_server import make_server
@@ -453,12 +493,20 @@ class Toy(object):
 
     def wsgi_app(self, environ, start_response):
         with self.request_context(environ):
+            Reloader(self.name)()
+            # check_reloader()
             rv = self.dispatch_request()
             response = self.make_response(rv)
             return response(environ, start_response)
 
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
+
+
+def check_reloader():
+    mod = sys.modules['__main__']
+    file_ = getattr(mod, '__file__', None)
+    print(mod, file_)
 
 
 class Reloader(object):
@@ -468,20 +516,18 @@ class Reloader(object):
     else:
         SUFFIX = '.pyc'
 
-    def __init__(self):
+    def __init__(self, file_name):
         self.mtimes = {}
+        self.file_name = file_name
 
     def check(self, mod):
-        
         if not(mod and hasattr(mod, '__file__') and mod.__file__):
             return
-
         try:
             # get file last modify time
             mtime = os.stat(mod.__file__).st_mtime
         except (OSError, IOError):
             return
-
         if mod.__file__.endswith(self.__class__.SUFFIX) and os.path.exists(mod.__file__[:-1]):
             # get .pyc and .py file max modify time
             mtime = max(os.stat(mod.__file__[:-1]).st_mtime, mtime)
