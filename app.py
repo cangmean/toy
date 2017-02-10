@@ -4,12 +4,12 @@
 一个玩具框架，用于理解python 框架机制。
 查看了flask源码和werkzeug源码, 并简化，解耦和。
 '''
-from werkzeug.exceptions import HTTPException, InternalServerError
 import re
 import os
 import sys
 import httplib
 import logging
+from pprint import pprint
 
 logger = logging.getLogger('toy')
 handler = logging.StreamHandler()
@@ -19,6 +19,8 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 __all__ = ['Toy']
+
+mtimes = {}
 
 rule_re = re.compile(r'''
     (?P<static>[^<]*)
@@ -463,11 +465,6 @@ class Toy(object):
         try:
             handler, params = self.match_request()
             return self.view_funcs[handler](**params)
-        except HTTPException as e:
-            handler = self.error_handlers.get(e.code)
-            if handler is None:
-                return e
-            return handler(e)
         except Exception as e:
             handler = self.error_handlers.get(500)
             # debug 状态为True 或者 没有自定义错误信息
@@ -479,6 +476,39 @@ class Toy(object):
         from wsgiref.simple_server import make_server
         server = make_server(host, int(port), self)
         server.serve_forever()
+
+    def auto_reload(self):
+        main_module = sys.modules['__main__']
+        filename = os.path.splitext(os.path.basename(main_module.__file__))[0]
+        try:
+            __import__(filename)
+        except ImportError:
+            pass
+
+        for module in sys.modules.values():
+            filename = getattr(module, '__file__', None)
+            if not (filename and os.path.isfile(filename)):
+                continue
+
+            if filename[-4:] in ('.pyc', '.pyo', '.pyd'):
+                filename = filename[:-1] # get the '.py' file
+
+            # get the time of most recent content modification
+            try:
+                mtime = os.stat(filename).st_mtime
+            except OSError as e:
+                logger.error(e)
+                continue
+            # set mtime to mtimes if mtimes not this module. reload module if module not in mtimes.
+            old_time = mtimes.get(module)
+            if old_time is None: # the first time in this function, just record mtime
+                mtimes[module] = mtime
+            elif old_time < mtime: # `module` is modified
+                try:
+                    reload(module)
+                    mtimes[module] = mtime
+                except ImportError:
+                    pass
 
     def make_response(self, rv):
         if isinstance(rv, self.response_class):
@@ -493,56 +523,9 @@ class Toy(object):
 
     def wsgi_app(self, environ, start_response):
         with self.request_context(environ):
-            Reloader(self.name)()
-            # check_reloader()
             rv = self.dispatch_request()
             response = self.make_response(rv)
             return response(environ, start_response)
 
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
-
-
-def check_reloader():
-    mod = sys.modules['__main__']
-    file_ = getattr(mod, '__file__', None)
-    print(mod, file_)
-
-
-class Reloader(object):
-
-    if sys.platform.startswith('java'):
-        SUFFIX = '$py.class'
-    else:
-        SUFFIX = '.pyc'
-
-    def __init__(self, file_name):
-        self.mtimes = {}
-        self.file_name = file_name
-
-    def check(self, mod):
-        if not(mod and hasattr(mod, '__file__') and mod.__file__):
-            return
-        try:
-            # get file last modify time
-            mtime = os.stat(mod.__file__).st_mtime
-        except (OSError, IOError):
-            return
-        if mod.__file__.endswith(self.__class__.SUFFIX) and os.path.exists(mod.__file__[:-1]):
-            # get .pyc and .py file max modify time
-            mtime = max(os.stat(mod.__file__[:-1]).st_mtime, mtime)
-
-        # set mtime to mtimes if mtimes not this module. reload module if module not in mtimes.
-        if mod not in self.mtimes:
-            self.mtimes[mod] = mtime
-        elif self.mtimes[mod] < mtime:
-            try:
-                reload(mod)
-                self.mtimes[mod] = mtime
-            except ImportError:
-                pass
-
-    def __call__(self):
-        # check all modules
-        for mod in sys.modules.values():
-            self.check(mod)
